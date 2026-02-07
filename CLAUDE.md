@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2026-02-06
 
 ## Active Technologies
+- Python 3.11+ + pathlib (stdlib), pydantic-settings (existing) (002-save-ingest-text)
+- Plain `.txt` files on local filesystem (002-save-ingest-text)
 
 - Python 3.11+ + LangChain, LangGraph, ChromaDB, FAISS, sentence-transformers, MCP Python SDK, Typer, Rich, BeautifulSoup4, requests (001-fomc-rag)
 
@@ -22,6 +24,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 002-save-ingest-text: Added Python 3.11+ + pathlib (stdlib), pydantic-settings (existing)
 
 - 001-fomc-rag: Added Python 3.11+ + LangChain, LangGraph, ChromaDB, FAISS, sentence-transformers, MCP Python SDK, Typer, Rich, BeautifulSoup4, requests
 

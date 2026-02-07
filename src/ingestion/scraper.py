@@ -94,7 +94,8 @@ def fetch_document(
         logger.warning("Failed to fetch %s: %s", url, e)
         return None
 
-    raw_text = clean_html_text(resp.text)
+    raw_html = resp.text
+    raw_text = clean_html_text(raw_html)
     if not raw_text or not raw_text.strip():
         logger.warning("Empty content after cleaning: %s", url)
         return None
@@ -108,6 +109,7 @@ def fetch_document(
         document_type=doc_type,
         source_url=url,
         raw_text=raw_text,
+        raw_html=raw_html,
     )
 
 

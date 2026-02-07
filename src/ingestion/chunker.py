@@ -81,11 +81,18 @@ def _split_text_recursive(
 
 
 def _get_overlap_text(text: str, overlap_tokens: int) -> str:
-    """Get the last N tokens worth of text for overlap."""
+    """Get the last N tokens worth of text for overlap, snapping to a word boundary."""
     if overlap_tokens <= 0:
         return ""
     chars = overlap_tokens * 4  # ~4 chars per token
-    return text[-chars:] if len(text) > chars else text
+    if len(text) <= chars:
+        return text
+    candidate = text[-chars:]
+    # Snap forward to the next word boundary to avoid mid-word truncation
+    space_idx = candidate.find(" ")
+    if space_idx != -1:
+        candidate = candidate[space_idx + 1:]
+    return candidate
 
 
 def chunk_document(

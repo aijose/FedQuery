@@ -16,6 +16,7 @@ class FOMCDocument:
     document_type: DocumentType
     source_url: str
     raw_text: str
+    raw_html: str = ""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     ingested_at: datetime = field(default_factory=datetime.now)
 

@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     # Storage
     fedquery_chroma_path: str = "./data/chroma"
+    fedquery_text_path: str = "./data/texts"
+    fedquery_html_path: str = "./data/html"
 
     # Ingestion
     fedquery_chunk_size: int = 512
@@ -28,6 +30,14 @@ class Settings(BaseSettings):
     @property
     def chroma_path(self) -> Path:
         return Path(self.fedquery_chroma_path)
+
+    @property
+    def text_path(self) -> Path:
+        return Path(self.fedquery_text_path)
+
+    @property
+    def html_path(self) -> Path:
+        return Path(self.fedquery_html_path)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

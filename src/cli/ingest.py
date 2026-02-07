@@ -29,6 +29,10 @@ def ingest(
         int,
         typer.Option("--chunk-overlap", help="Overlap between chunks in tokens"),
     ] = 50,
+    save_chunks: Annotated[
+        bool,
+        typer.Option("--save-chunks", help="Save chunk debug files alongside text"),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose logging"),
@@ -59,6 +63,7 @@ def ingest(
             store=store,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            save_chunks=save_chunks,
         )
         progress.update(task, completed=True)
 
@@ -67,5 +72,7 @@ def ingest(
     console.print(f"  Documents ingested: {result['documents_ingested']}")
     console.print(f"  Documents skipped (duplicates): {result['documents_skipped']}")
     console.print(f"  Chunks stored: {result['chunks_stored']}")
+    console.print(f"  Text files saved: {result['text_files_saved']} to {settings.text_path}")
+    console.print(f"  HTML files saved: {result['html_files_saved']} to {settings.html_path}")
     console.print(f"  Errors: {result['errors']}")
     console.print(f"  Total in store: {store.count} chunks")

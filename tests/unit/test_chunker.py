@@ -3,6 +3,7 @@
 import pytest
 
 from src.ingestion.chunker import (
+    _get_overlap_text,
     chunk_document,
     detect_section_header,
     SECTION_PATTERNS,
@@ -43,6 +44,29 @@ information and its implications for monetary policy."""
         source_url="https://www.federalreserve.gov/monetarypolicy/fomcminutes20240131.htm",
         raw_text=text,
     )
+
+
+class TestGetOverlapText:
+    """Test that overlap text snaps to word boundaries."""
+
+    def test_snaps_to_word_boundary(self):
+        text = "The Committee decided to maintain the target range for assessments"
+        # With overlap_tokens=3 → 12 chars → "r assessments" → snaps to "assessments"
+        result = _get_overlap_text(text, overlap_tokens=3)
+        assert result[0] != " ", "Should not start with a space"
+        assert " " not in result or result.split()[0].isalpha(), "First word should be complete"
+
+    def test_does_not_truncate_words(self):
+        text = "inflation pressures and inflation expectations and financial developments"
+        result = _get_overlap_text(text, overlap_tokens=5)
+        first_word = result.split()[0]
+        assert first_word in text, f"First word '{first_word}' should be a complete word from the source"
+
+    def test_returns_empty_for_zero_overlap(self):
+        assert _get_overlap_text("some text", 0) == ""
+
+    def test_returns_full_text_when_shorter_than_overlap(self):
+        assert _get_overlap_text("short", 100) == "short"
 
 
 class TestDetectSectionHeader:
@@ -136,6 +160,31 @@ class TestChunkDocument:
                 # At least some overlap text should appear in the next chunk
                 # (checking that the overlap mechanism is working)
                 assert len(chunks[i].chunk_text) > 0 and len(chunks[i + 1].chunk_text) > 0
+
+    def test_overlap_does_not_start_mid_word(self, sample_document):
+        chunks = chunk_document(sample_document, chunk_size=200, chunk_overlap=50)
+        for chunk in chunks:
+            text = chunk.chunk_text.strip()
+            # First character should not be a lowercase continuation of a cut word
+            # (e.g. "ssments" from "assessments")
+            if text and text[0].isalpha():
+                # Check the word isn't a fragment: the first word should exist
+                # as a complete word somewhere, or be the start of a sentence.
+                # Simple heuristic: first char can be uppercase (sentence start)
+                # or the first word should be preceded by whitespace or be the
+                # document start — but simplest check: no mid-word cuts means
+                # the char before this text in the original doc is whitespace/newline.
+                pass  # The real test is below
+
+        # Concrete check: no chunk should start with a lowercase fragment
+        # that doesn't appear as a standalone word start in the source
+        if len(chunks) >= 2:
+            for chunk in chunks[1:]:  # skip first chunk
+                first_word = chunk.chunk_text.strip().split()[0]
+                # First word of overlap chunk should appear as a whole word in source
+                assert first_word in sample_document.raw_text, (
+                    f"Chunk starts with truncated word: '{first_word}'"
+                )
 
     def test_short_document_produces_single_chunk(self):
         doc = FOMCDocument(

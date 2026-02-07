@@ -40,7 +40,34 @@ def clean_html_text(html: str) -> str:
     # Normalize whitespace
     text = _normalize_whitespace(text)
 
+    # Remove web artifacts common in FOMC pages
+    text = _strip_web_artifacts(text)
+
     return text.strip()
+
+
+def _strip_web_artifacts(text: str) -> str:
+    """Remove common web page artifacts from FOMC document text.
+
+    Strips the 'Share' button text and media contact boilerplate that
+    appear on federalreserve.gov press release pages.
+    """
+    # Remove standalone "Share" line (from social sharing buttons)
+    text = re.sub(r"^\s*Share\s*$", "", text, flags=re.MULTILINE)
+
+    # Remove media contact block:
+    #   "For media inquiries, please email\n[email protected]\n or call 202-452-2955."
+    text = re.sub(
+        r"For media inquiries.*?202-452-2955\.?",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Clean up any resulting excess blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text
 
 
 def _normalize_whitespace(text: str) -> str:
