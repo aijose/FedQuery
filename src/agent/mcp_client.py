@@ -5,19 +5,30 @@ embedding provider, matching the ChunkResult schema expected by
 the agent graph nodes.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.agent.state import ChunkResult
 from src.embedding.provider import EmbeddingProvider
 from src.vectorstore.chroma_store import ChromaStore
+
+if TYPE_CHECKING:
+    from src.retrieval.reranker import CrossEncoderReranker
 
 
 def create_search_fn(
     store: ChromaStore,
     embedding_provider: EmbeddingProvider,
+    reranker: CrossEncoderReranker | None = None,
 ):
     """Create a search function that wraps ChromaDB queries.
 
     Returns a callable matching the signature expected by search_corpus:
         (query: str, top_k: int) -> list[ChunkResult]
+
+    When a reranker is provided, over-fetches 3x from ChromaDB, reranks
+    with the cross-encoder, and returns the top-k results.
 
     Note: In a full MCP deployment, this would spawn an MCP server subprocess
     and communicate via stdio. For the MVP, we call the store directly through
@@ -25,8 +36,9 @@ def create_search_fn(
     """
 
     def search_fn(query: str, top_k: int = 5) -> list[ChunkResult]:
+        fetch_k = top_k * 3 if reranker else top_k
         query_embedding = embedding_provider.embed([query])[0]
-        raw_results = store.query(query_embedding=query_embedding, top_k=top_k)
+        raw_results = store.query(query_embedding=query_embedding, top_k=fetch_k)
 
         results = []
         for r in raw_results:
@@ -45,6 +57,25 @@ def create_search_fn(
                 chunk_text=r.get("text", ""),
                 relevance_score=relevance_score,
             ))
+
+        if reranker and results:
+            reranked = reranker.rerank(
+                query,
+                [dict(r) for r in results],
+                top_k=top_k,
+            )
+            results = [
+                ChunkResult(
+                    chunk_id=r["chunk_id"],
+                    document_name=r["document_name"],
+                    document_date=r["document_date"],
+                    document_id=r["document_id"],
+                    section_header=r["section_header"],
+                    chunk_text=r["chunk_text"],
+                    relevance_score=r["relevance_score"],
+                )
+                for r in reranked
+            ]
 
         return results
 

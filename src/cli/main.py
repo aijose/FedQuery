@@ -4,6 +4,7 @@ import typer
 
 from src.cli.ask import ask
 from src.cli.benchmark import benchmark
+from src.cli.evaluate import evaluate
 from src.cli.ingest import ingest
 
 app = typer.Typer(
@@ -14,6 +15,7 @@ app = typer.Typer(
 app.command(name="ask")(ask)
 app.command(name="ingest")(ingest)
 app.command(name="benchmark")(benchmark)
+app.command(name="evaluate")(evaluate)
 
 
 if __name__ == "__main__":

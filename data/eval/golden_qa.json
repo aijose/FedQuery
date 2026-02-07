@@ -1,0 +1,343 @@
+[
+  {
+    "id": "factual-01",
+    "question": "What was the federal funds rate target range set by the FOMC in January 2024?",
+    "category": "factual",
+    "expected_answer_keywords": ["5-1/4", "5-1/2", "5.25", "5.50", "maintain"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "maintain the target range for the federal funds rate at 5-1/4 to 5-1/2 percent"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-02",
+    "question": "Who voted against the monetary policy action at the September 2024 FOMC meeting?",
+    "category": "factual",
+    "expected_answer_keywords": ["Bowman", "Michelle"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Michelle W. Bowman, who preferred to lower the target range for the federal funds rate by 1/4 percentage point"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-03",
+    "question": "By how much did the FOMC cut the federal funds rate in September 2024?",
+    "category": "factual",
+    "expected_answer_keywords": ["1/2", "50 basis", "0.50", "half"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "lower the target range for the federal funds rate by 1/2 percentage point to 4-3/4 to 5 percent"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-04",
+    "question": "What was the federal funds rate target range after the December 2024 FOMC decision?",
+    "category": "factual",
+    "expected_answer_keywords": ["4-1/4", "4-1/2", "4.25", "4.50"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "lower the target range for the federal funds rate by 1/4 percentage point to 4-1/4 to 4-1/2 percent"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-05",
+    "question": "How did the FOMC describe economic activity in the January 2024 statement?",
+    "category": "factual",
+    "expected_answer_keywords": ["expanding", "solid pace"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "economic activity has been expanding at a solid pace"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-06",
+    "question": "What was the FOMC's assessment of inflation in the January 2024 statement?",
+    "category": "factual",
+    "expected_answer_keywords": ["eased", "elevated", "remains elevated"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Inflation has eased over the past year but remains elevated"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-07",
+    "question": "Who dissented at the December 2024 FOMC meeting?",
+    "category": "factual",
+    "expected_answer_keywords": ["Hammack", "Beth"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Beth M. Hammack, who preferred to maintain the target range for the federal funds rate at 4-1/2 to 4-3/4 percent"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "factual-08",
+    "question": "What condition did the FOMC set for reducing the federal funds rate in January 2024?",
+    "category": "factual",
+    "expected_answer_keywords": ["greater confidence", "inflation", "sustainably", "2 percent"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "does not expect it will be appropriate to reduce the target range until it has gained greater confidence that inflation is moving sustainably toward 2 percent"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "factual-09",
+    "question": "How did the FOMC describe job gains in January 2024?",
+    "category": "factual",
+    "expected_answer_keywords": ["moderated", "remain strong"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Job gains have moderated since early last year but remain strong"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "cross-doc-01",
+    "question": "How did the FOMC's characterization of inflation change between January 2024 and September 2024?",
+    "category": "cross-document",
+    "expected_answer_keywords": ["eased", "elevated", "further progress", "2 percent"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"},
+      {"type": "statement", "date": "2024-09-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Inflation has eased over the past year but remains elevated",
+      "Inflation has made further progress toward the Committee's 2 percent objective but remains somewhat elevated"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "cross-doc-02",
+    "question": "How did the FOMC's description of labor market conditions evolve over the course of 2024?",
+    "category": "cross-document",
+    "expected_answer_keywords": ["moderated", "strong", "slowed", "moved up", "generally eased"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"},
+      {"type": "statement", "date": "2024-09-18"},
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Job gains have moderated since early last year but remain strong",
+      "Job gains have slowed, and the unemployment rate has moved up but remains low",
+      "labor market conditions have generally eased, and the unemployment rate has moved up but remains low"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "id": "cross-doc-03",
+    "question": "Compare the FOMC's risk assessment between January 2024 and September 2024 statements.",
+    "category": "cross-document",
+    "expected_answer_keywords": ["moving into better balance", "roughly in balance", "attentive", "inflation risks", "dual mandate"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"},
+      {"type": "statement", "date": "2024-09-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "risks to achieving its employment and inflation goals are moving into better balance",
+      "risks to achieving its employment and inflation goals are roughly in balance"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "cross-doc-04",
+    "question": "What was the total cumulative rate cut by the FOMC in 2024?",
+    "category": "cross-document",
+    "expected_answer_keywords": ["100 basis", "1 percentage point", "full percentage point"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"},
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "lower the target range for the federal funds rate by 1/2 percentage point to 4-3/4 to 5 percent",
+      "lower the target range for the federal funds rate by 1/4 percentage point to 4-1/4 to 4-1/2 percent"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "cross-doc-05",
+    "question": "Were there any dissenting votes at FOMC meetings in 2024, and what were the reasons?",
+    "category": "cross-document",
+    "expected_answer_keywords": ["Bowman", "Hammack", "preferred", "1/4 percentage point", "maintain"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"},
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "Michelle W. Bowman, who preferred to lower the target range for the federal funds rate by 1/4 percentage point",
+      "Beth M. Hammack, who preferred to maintain the target range for the federal funds rate at 4-1/2 to 4-3/4 percent"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "section-01",
+    "question": "Who attended the January 2024 FOMC meeting?",
+    "category": "section-specific",
+    "expected_answer_keywords": ["Powell", "Williams", "Barkin", "Barr", "Bostic", "Bowman", "Cook", "Daly", "Jefferson", "Kugler", "Mester", "Waller"],
+    "relevant_documents": [
+      {"type": "minutes", "date": "2024-01-31"}
+    ],
+    "relevant_sections": ["Attendance"],
+    "relevant_text_fragments": [
+      "Jerome H. Powell, Chair",
+      "John C. Williams, Vice Chair"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "section-02",
+    "question": "What did FOMC participants discuss about the balance of risks in 2024 minutes?",
+    "category": "section-specific",
+    "expected_answer_keywords": ["risks", "balance", "employment", "inflation"],
+    "relevant_documents": [
+      {"type": "minutes", "date": "2024-01-31"},
+      {"type": "minutes", "date": "2024-09-18"}
+    ],
+    "relevant_sections": ["Participants' Discussion", "Committee Policy Action"],
+    "relevant_text_fragments": [
+      "risks to achieving its employment and inflation goals"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "section-03",
+    "question": "What did the FOMC minutes say about quantitative tightening or balance sheet reduction in 2024?",
+    "category": "section-specific",
+    "expected_answer_keywords": ["Treasury securities", "agency debt", "mortgage-backed", "reducing", "holdings"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-01-31"},
+      {"type": "minutes", "date": "2024-01-31"}
+    ],
+    "relevant_sections": ["Committee Policy Action"],
+    "relevant_text_fragments": [
+      "continue reducing its holdings of Treasury securities and agency debt and agency mortgage-backed securities"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "section-04",
+    "question": "What were the alternate members of the FOMC in January 2024?",
+    "category": "section-specific",
+    "expected_answer_keywords": ["Collins", "Goolsbee", "Schmid", "Shukla"],
+    "relevant_documents": [
+      {"type": "minutes", "date": "2024-01-31"}
+    ],
+    "relevant_sections": ["Attendance"],
+    "relevant_text_fragments": [
+      "Susan M. Collins, Austan D. Goolsbee"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "temporal-01",
+    "question": "When was the first interest rate cut by the FOMC in 2024?",
+    "category": "temporal",
+    "expected_answer_keywords": ["September", "2024-09-18", "September 18"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "decided to lower the target range for the federal funds rate by 1/2 percentage point"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "temporal-02",
+    "question": "Did the FOMC change rates at the March 2024 meeting?",
+    "category": "temporal",
+    "expected_answer_keywords": ["maintain", "5-1/4", "5-1/2", "unchanged"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-03-20"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "maintain the target range for the federal funds rate"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "temporal-03",
+    "question": "How many rate cuts did the FOMC make in the second half of 2024?",
+    "category": "temporal",
+    "expected_answer_keywords": ["two", "2", "September", "December"],
+    "relevant_documents": [
+      {"type": "statement", "date": "2024-09-18"},
+      {"type": "statement", "date": "2024-12-18"}
+    ],
+    "relevant_sections": [],
+    "relevant_text_fragments": [
+      "lower the target range for the federal funds rate by 1/2 percentage point to 4-3/4 to 5 percent",
+      "lower the target range for the federal funds rate by 1/4 percentage point to 4-1/4 to 4-1/2 percent"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "oos-01",
+    "question": "What is the current GDP growth rate of China?",
+    "category": "out-of-scope",
+    "expected_answer_keywords": [],
+    "relevant_documents": [],
+    "relevant_sections": [],
+    "relevant_text_fragments": [],
+    "difficulty": "easy"
+  },
+  {
+    "id": "oos-02",
+    "question": "What is the European Central Bank's current interest rate?",
+    "category": "out-of-scope",
+    "expected_answer_keywords": [],
+    "relevant_documents": [],
+    "relevant_sections": [],
+    "relevant_text_fragments": [],
+    "difficulty": "easy"
+  },
+  {
+    "id": "oos-03",
+    "question": "Who won the 2024 presidential election?",
+    "category": "out-of-scope",
+    "expected_answer_keywords": [],
+    "relevant_documents": [],
+    "relevant_sections": [],
+    "relevant_text_fragments": [],
+    "difficulty": "easy"
+  }
+]
