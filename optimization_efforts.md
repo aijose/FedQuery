@@ -4,7 +4,7 @@
 
 Systematic evaluation and optimization of the FedQuery FOMC RAG retrieval pipeline. Work was done in three phases: building an evaluation framework, testing chunking parameters, and adding cross-encoder reranking.
 
-Corpus: 16 FOMC documents from 2024 (8 statements, 8 minutes), 269 chunks in ChromaDB.
+Corpus: FOMC documents from 2020-2024 (5 years), 1,545 chunks in ChromaDB. Phases 1-3 were originally run on 2024 data (269 chunks); Phase 4 benchmark uses the full corpus.
 
 Golden QA dataset: 24 hand-crafted questions across 5 categories (factual, cross-document, section-specific, temporal, out-of-scope).
 
@@ -123,7 +123,96 @@ The chunking parameter search confirmed the default (512/50) is near-optimal. Th
 
 ---
 
+## Phase 4: HNSW vs IVF Benchmark (Full 5-Year Corpus)
+
+### Setup
+
+Benchmark run on the full corpus: 1,545 chunks, 384-dimensional embeddings (all-MiniLM-L6-v2). FAISS indexes built from embeddings extracted from ChromaDB.
+
+- **200 queries**: 20 real FOMC questions + 180 random vectors for statistical coverage
+- **Ground truth**: brute-force flat L2 index (exact nearest neighbors)
+- **Metrics**: Recall@5, Recall@10, query latency (avg/p50/p99), index size on disk
+
+### HNSW Parameter Sweep
+
+HNSW builds a multi-layer navigable graph. Each vector connects to `M` neighbors. At query time, `efSearch` controls the search beam width — higher means more neighbors explored, better recall, higher latency.
+
+| Config | Recall@5 | Recall@10 | Avg ms | P50 ms | P99 ms | Size KB |
+|--------|----------|-----------|--------|--------|--------|---------|
+| M=16 ef=32 | 0.6990 | 0.6955 | 0.012 | 0.011 | 0.018 | 2,535 |
+| M=16 ef=64 | 0.8370 | 0.8415 | 0.021 | 0.021 | 0.033 | 2,535 |
+| M=16 ef=128 | 0.9350 | 0.9355 | 0.041 | 0.040 | 0.064 | 2,535 |
+| M=32 ef=32 | 0.8590 | 0.8575 | 0.017 | 0.017 | 0.027 | 2,727 |
+| **M=32 ef=64** | **0.9330** | **0.9380** | **0.030** | **0.029** | **0.057** | **2,727** |
+| M=32 ef=128 | 0.9860 | 0.9850 | 0.054 | 0.053 | 0.085 | 2,727 |
+| M=64 ef=32 | 0.9250 | 0.9155 | 0.020 | 0.020 | 0.032 | 3,114 |
+| M=64 ef=64 | 0.9730 | 0.9720 | 0.034 | 0.034 | 0.045 | 3,114 |
+| M=64 ef=128 | 0.9940 | 0.9940 | 0.058 | 0.058 | 0.070 | 3,114 |
+
+**Key observations:**
+- `M` controls graph density: higher M = more edges = better recall + more memory. Going from M=16 to M=64 adds 23% to index size but pushes recall from 0.70 to 0.99.
+- `efSearch` is the latency/recall knob: doubling ef roughly doubles latency and adds ~10% recall. M=32/ef=64 is the sweet spot for our corpus — 93% recall at 0.03ms.
+- Memory cost is modest: the graph adjacency lists add only ~400KB over the raw vectors (2,318KB flat).
+
+### IVF Parameter Sweep
+
+IVF partitions vectors into `nlist` Voronoi cells via k-means. At query time, `nprobe` cells are searched. More cells = finer partitions = lower nprobe recall. More nprobe = better recall = closer to brute-force cost.
+
+| Config | Recall@5 | Recall@10 | Avg ms | P50 ms | P99 ms | Size KB |
+|--------|----------|-----------|--------|--------|--------|---------|
+| nlist=10 nprobe=1 | 0.5360 | 0.5160 | 0.006 | 0.006 | 0.007 | 2,345 |
+| nlist=10 nprobe=5 | 0.9530 | 0.9520 | 0.022 | 0.021 | 0.062 | 2,345 |
+| **nlist=10 nprobe=10** | **1.0000** | **1.0000** | **0.032** | **0.031** | **0.042** | **2,345** |
+| nlist=25 nprobe=1 | 0.4170 | 0.4120 | 0.004 | 0.004 | 0.006 | 2,367 |
+| nlist=25 nprobe=5 | 0.8510 | 0.8580 | 0.010 | 0.010 | 0.015 | 2,367 |
+| **nlist=25 nprobe=10** | **0.9590** | **0.9590** | **0.017** | **0.016** | **0.022** | **2,367** |
+| nlist=25 nprobe=25 | 1.0000 | 1.0000 | 0.033 | 0.033 | 0.042 | 2,367 |
+| nlist=39 nprobe=1 | 0.3830 | 0.3630 | 0.003 | 0.003 | 0.004 | 2,389 |
+| nlist=39 nprobe=5 | 0.7650 | 0.7680 | 0.007 | 0.007 | 0.011 | 2,389 |
+| nlist=39 nprobe=10 | 0.9120 | 0.9130 | 0.012 | 0.011 | 0.015 | 2,389 |
+| nlist=39 nprobe=39 | 1.0000 | 1.0000 | 0.035 | 0.034 | 0.041 | 2,389 |
+
+**Key observations:**
+- When `nprobe = nlist` (search all cells), IVF degrades to brute-force — recall is perfect but there's no speed gain, just overhead from the partitioning structure.
+- The sweet spot is `nprobe ≈ nlist/3`: e.g., nlist=25/nprobe=10 gives 96% recall at 0.017ms.
+- At low nprobe (1), recall plummets to ~40-54% — the query vector lands in one cell, and nearby relevant vectors in adjacent cells are missed entirely.
+- IVF memory is slightly *lower* than HNSW (2,345 vs 2,727 KB) because inverted lists are just vector assignments, not full graph structures.
+
+### Brute-Force Baseline
+
+| Metric | Value |
+|--------|-------|
+| Recall@5 | 1.0000 (by definition) |
+| Avg Latency | 0.031ms |
+| P99 Latency | 0.036ms |
+| Size | 2,318 KB |
+
+At 1,545 vectors, brute-force is fast enough (0.031ms) that ANN indexes provide marginal speed improvement. The real value of ANN emerges at >100K vectors where brute-force linear scan becomes prohibitive.
+
+### Head-to-Head: Best Configurations
+
+| Metric | HNSW (M=32 ef=64) | IVF (nlist=25 nprobe=10) | Brute-Force |
+|--------|-------------------|--------------------------|-------------|
+| Recall@5 | 0.9330 | 0.9590 | 1.0000 |
+| Avg Latency | 0.030ms | 0.017ms | 0.031ms |
+| P99 Latency | 0.057ms | 0.022ms | 0.036ms |
+| Index Size | 2,727 KB | 2,367 KB | 2,318 KB |
+| Real Query Recall@5 | 1.0000 | 1.0000 | 1.0000 |
+
+Both ANN methods hit 100% recall on real FOMC queries — the recall gap only shows on random vectors where edge cases in geometric space matter.
+
+### Why HNSW Is Still the Right Default
+
+Despite IVF showing slightly better numbers at this corpus size, HNSW is the right choice for FedQuery:
+
+1. **ChromaDB uses HNSW internally.** Switching to IVF would mean building a parallel FAISS index, duplicating storage, and adding sync complexity. Using ChromaDB's built-in HNSW is zero-configuration.
+2. **HNSW scales better without retuning.** As the corpus grows (more years of FOMC data), HNSW's graph adapts without needing to retrain centroids or adjust `nlist`. IVF requires periodic retraining when the data distribution shifts.
+3. **At this scale, both are essentially free.** Query latency is 0.017-0.031ms — thousands of times faster than the LLM API call (2-5 seconds). The ANN algorithm choice is irrelevant to end-user latency.
+4. **IVF's advantages emerge at scale.** With millions of vectors, IVF's lower memory footprint (no graph structure) and ability to shard across machines make it the practical choice. At 1,545 vectors, these advantages don't apply.
+
+---
+
 ## Remaining Opportunities
 
-- **Phase 4: Metadata filtering** — Rule-based date/type extraction from queries, passed as ChromaDB `where` filters. Expected to significantly improve temporal queries (current MRR=0.242).
-- **Phase 5: Confidence threshold calibration** — Use evaluation score distributions to empirically set high/medium/low confidence thresholds in the agent workflow. Also unify the relevance score formula between `mcp_client.py` and `server.py`.
+- **Metadata filtering** — Rule-based date/type extraction from queries, passed as ChromaDB `where` filters. Expected to significantly improve temporal queries (current MRR=0.242).
+- **Confidence threshold calibration** — Use evaluation score distributions to empirically set high/medium/low confidence thresholds in the agent workflow.

@@ -148,21 +148,25 @@ Set `FEDQUERY_USE_MCP=false` for a direct in-process mode that skips the subproc
 fedquery benchmark
 ```
 
-Compares two approximate nearest neighbor (ANN) index types using FAISS on the same FOMC corpus.
+Compares two approximate nearest neighbor (ANN) index types using FAISS on the full 5-year FOMC corpus (1,545 chunks, 384 dimensions).
 
-**HNSW** (Hierarchical Navigable Small World) builds a multi-layer graph where each vector is a node connected to its approximate nearest neighbors. Queries navigate from coarse upper layers to fine lower layers, like a skip list over geometric space. This gives excellent recall (typically >98%) and low latency at the cost of memory — the graph structure stores neighbor lists for every vector.
+**HNSW** (Hierarchical Navigable Small World) builds a multi-layer graph where each vector is a node connected to its approximate nearest neighbors. Queries navigate from coarse upper layers to fine lower layers, like a skip list over geometric space. Tuning knobs: `M` (edges per node — graph density), `efSearch` (beam width — recall/latency tradeoff). Higher M = better recall + more memory; higher efSearch = better recall + higher latency.
 
-**IVF** (Inverted File Index) partitions the vector space into Voronoi cells using k-means clustering. At query time, it only searches the `nprobe` nearest cells rather than the full dataset. This is memory-efficient (only centroids + inverted lists) but has a recall/speed tradeoff controlled by `nprobe` — too few cells means missed neighbors, too many approaches brute-force cost.
+**IVF** (Inverted File Index) partitions the vector space into Voronoi cells using k-means clustering. At query time, it only searches the `nprobe` nearest cells rather than the full dataset. Tuning knobs: `nlist` (number of cells — partition granularity), `nprobe` (cells searched — recall/speed tradeoff). When `nprobe = nlist`, IVF degrades to brute-force. When `nprobe = 1`, recall drops to ~40-54% because relevant vectors in adjacent cells are missed entirely.
 
-| Metric | HNSW | IVF |
-|--------|------|-----|
-| Query Latency | Lower at small to medium scale | Better at >1M vectors |
-| Recall@k | Typically >98% | Depends on nprobe (>95% tuned) |
-| Memory | Higher (graph adjacency lists) | Lower (centroids + inverted lists) |
-| Build Time | Slower (graph construction) | Faster (k-means + assignment) |
-| Tuning | `M` (edges), `efConstruction`, `efSearch` | `nlist` (cells), `nprobe` (search width) |
+### Benchmark Results (1,545 chunks)
 
-**Conclusion**: For the FOMC corpus size (hundreds to low thousands of chunks), HNSW (ChromaDB's default) is the right choice — its graph structure fits entirely in memory and delivers near-perfect recall with sub-millisecond queries. IVF's partitioning overhead only pays off at millions of vectors where memory constraints force the tradeoff. Our benchmark validates this on real FOMC data with recall, latency, and memory measurements.
+| Metric | HNSW (M=32 ef=64) | IVF (nlist=25 nprobe=10) | Brute-Force |
+|--------|-------------------|--------------------------|-------------|
+| Recall@5 | 0.933 | 0.959 | 1.000 |
+| Avg Latency | 0.030ms | 0.017ms | 0.031ms |
+| P99 Latency | 0.057ms | 0.022ms | 0.036ms |
+| Index Size | 2,727 KB | 2,367 KB | 2,318 KB |
+| Real Query Recall@5 | 1.000 | 1.000 | 1.000 |
+
+Both hit 100% recall on real FOMC queries — the recall gap only appears on random vectors where geometric edge cases matter. Full parameter sweeps (HNSW: M={16,32,64} x efSearch={32,64,128}; IVF: nlist={10,25,39} x nprobe={1,5,10,all}) are in [`optimization_efforts.md`](optimization_efforts.md).
+
+**Why HNSW is the right default**: ChromaDB uses HNSW internally — no separate index to build or sync. HNSW scales without retuning as the corpus grows (IVF needs centroid retraining). And at this corpus size, all methods are sub-millisecond — thousands of times faster than the LLM API call. IVF's memory advantage only matters at millions of vectors.
 
 ## Configuration
 
