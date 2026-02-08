@@ -54,9 +54,13 @@ federalreserve.gov → Scraper → Cleaner → Chunker → Embedder → ChromaDB
 - **Embedder**: all-MiniLM-L6-v2 (384 dimensions) via a swappable `EmbeddingProvider` interface.
 - **Vector Store**: ChromaDB with cosine similarity, storing 7 metadata fields per chunk.
 
-### Chunking and Citation Design
+### Chunking Strategy
 
-FOMC documents have predictable section headers. The chunker captures these via regex and attaches them as metadata to each chunk:
+**Parameters**: ~512 tokens per chunk, ~50 token overlap. These were chosen through grid evaluation — 512 keeps enough context for FOMC policy language while staying well within embedding model limits (all-MiniLM-L6-v2 supports 256 word pieces, but longer inputs still produce meaningful pooled embeddings). The 50-token overlap ensures cross-chunk concepts (e.g., a policy rationale split across paragraphs) aren't lost at boundaries.
+
+**Boundary handling**: Recursive character splitting tries paragraph breaks first (`\n\n`), then sentence breaks, then word boundaries. Overlap text snaps to word boundaries to avoid mid-word splits.
+
+**Section header detection**: FOMC documents have predictable section headers. The chunker captures these via regex and attaches them as metadata:
 
 ```
 SECTION_PATTERNS = [
@@ -67,13 +71,15 @@ SECTION_PATTERNS = [
 ]
 ```
 
-This enables human-readable citations without a full document parser:
+This enables human-readable citations without a full document parser — each chunk carries its section context (e.g., `§Committee Policy Action`).
 
-```
-FOMC Minutes, Jan 2024, §Economic Outlook, Chunk 2
-```
+### Retrieval Design
 
-Recursive character splitting respects paragraph boundaries before falling back to sentence and word boundaries, keeping chunks coherent.
+**Bi-encoder search**: Queries are embedded with all-MiniLM-L6-v2 and matched against chunks via cosine similarity in ChromaDB. ChromaDB returns cosine *distance* in [0, 2], converted to similarity as `1.0 - distance / 2.0`.
+
+**Cross-encoder reranking** (optional, `FEDQUERY_RERANKER_ENABLED=true`): When enabled, the retriever over-fetches 3x candidates from the bi-encoder, then reranks with `cross-encoder/ms-marco-MiniLM-L-6-v2`. This improves precision at the cost of latency — the cross-encoder scores each (query, chunk) pair individually rather than comparing pre-computed embeddings.
+
+**Embedding provider interface**: The `EmbeddingProvider` abstraction allows swapping models (e.g., to a larger model like `all-mpnet-base-v2`) by changing one config variable.
 
 ### Agent Workflow (LangGraph)
 
@@ -97,8 +103,17 @@ assess_query → search_corpus → evaluate_confidence
 
 - **Confidence thresholds**: high ≥ 0.55, medium ≥ 0.40, low ≥ 0.25, insufficient < 0.25 (calibrated for all-MiniLM-L6-v2 cosine similarity)
 - **Reformulation**: When confidence is low, the agent rephrases the query and retries (max 2 attempts)
-- **Citation validation**: Each citation is verified against retrieved chunks before being included in the response
 - **Uncertainty handling**: When evidence is insufficient, the system explicitly says so rather than fabricating an answer
+
+### Citation Grounding
+
+Citations are enforced through a three-stage pipeline:
+
+1. **`synthesize_answer`**: The LLM is prompted to cite sources as `[Source N]` references. After generation, the node parses which `[Source N]` markers actually appear in the output text and builds citations *only* for referenced chunks, ordered by first appearance.
+2. **`validate_citations`**: Each citation's `chunk_id` is verified against the set of retrieved chunks. Citations referencing unknown chunk IDs are dropped.
+3. **`respond`**: Source references are remapped to sequential numbering (`[1]`, `[2]`, ...) matching the Sources footer, so the final output never has gaps like `[1], [3]`.
+
+This means the system cannot cite a source it didn't retrieve, and it won't list sources in the footer that aren't actually referenced in the answer text.
 
 ### LLM Agnosticism
 
@@ -123,7 +138,9 @@ Two tools exposed via the MCP Python SDK (stdio transport):
 | `search_fomc(query, top_k)` | Semantic search across the vector store |
 | `get_document(doc_id)` | Fetch full document content by ID |
 
-All retrieval goes through MCP tools — the agent never accesses the vector store directly.
+By default (`FEDQUERY_USE_MCP=true`), the CLI spawns the MCP server as a subprocess and communicates via stdio — the same pattern Claude Desktop uses for local MCP tools. The server loads the embedding model and ChromaDB store in its own process, and the agent issues `search_fomc` / `get_document` tool calls over the MCP protocol.
+
+Set `FEDQUERY_USE_MCP=false` for a direct in-process mode that skips the subprocess (faster for development/debugging, same retrieval results). Use `--verbose` to see which mode is active.
 
 ## HNSW vs IVF Benchmark
 
@@ -131,15 +148,21 @@ All retrieval goes through MCP tools — the agent never accesses the vector sto
 fedquery benchmark
 ```
 
-Compares two approximate nearest neighbor index types using FAISS on the same FOMC corpus:
+Compares two approximate nearest neighbor (ANN) index types using FAISS on the same FOMC corpus.
+
+**HNSW** (Hierarchical Navigable Small World) builds a multi-layer graph where each vector is a node connected to its approximate nearest neighbors. Queries navigate from coarse upper layers to fine lower layers, like a skip list over geometric space. This gives excellent recall (typically >98%) and low latency at the cost of memory — the graph structure stores neighbor lists for every vector.
+
+**IVF** (Inverted File Index) partitions the vector space into Voronoi cells using k-means clustering. At query time, it only searches the `nprobe` nearest cells rather than the full dataset. This is memory-efficient (only centroids + inverted lists) but has a recall/speed tradeoff controlled by `nprobe` — too few cells means missed neighbors, too many approaches brute-force cost.
 
 | Metric | HNSW | IVF |
 |--------|------|-----|
-| Query Latency | Lower at small scale | Better at >1M vectors |
-| Recall@k | Typically >98% | Typically >95% |
-| Memory | Higher (graph structure) | Lower (inverted lists) |
+| Query Latency | Lower at small to medium scale | Better at >1M vectors |
+| Recall@k | Typically >98% | Depends on nprobe (>95% tuned) |
+| Memory | Higher (graph adjacency lists) | Lower (centroids + inverted lists) |
+| Build Time | Slower (graph construction) | Faster (k-means + assignment) |
+| Tuning | `M` (edges), `efConstruction`, `efSearch` | `nlist` (cells), `nprobe` (search width) |
 
-**Conclusion**: For the FOMC corpus size (hundreds to low thousands of chunks), HNSW (ChromaDB's default) is the right choice. IVF becomes advantageous only at millions of vectors where memory constraints matter.
+**Conclusion**: For the FOMC corpus size (hundreds to low thousands of chunks), HNSW (ChromaDB's default) is the right choice — its graph structure fits entirely in memory and delivers near-perfect recall with sub-millisecond queries. IVF's partitioning overhead only pays off at millions of vectors where memory constraints force the tradeoff. Our benchmark validates this on real FOMC data with recall, latency, and memory measurements.
 
 ## Configuration
 
@@ -152,6 +175,9 @@ Compares two approximate nearest neighbor index types using FAISS on the same FO
 | `FEDQUERY_CHROMA_PATH` | `./data/chroma` | ChromaDB persistence path |
 | `FEDQUERY_CHUNK_SIZE` | `512` | Target chunk size in tokens |
 | `FEDQUERY_CHUNK_OVERLAP` | `50` | Overlap between chunks in tokens |
+| `FEDQUERY_RERANKER_ENABLED` | `false` | Enable cross-encoder reranking |
+| `FEDQUERY_RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranker model |
+| `FEDQUERY_USE_MCP` | `true` | Use MCP server subprocess (`false` for direct mode) |
 
 ## CLI Commands
 
@@ -187,7 +213,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-55 tests covering unit, integration, and contract tests. One FAISS IVF test is skipped on macOS ARM due to a known segfault when running alongside ChromaDB in the same process.
+158 tests covering unit, integration, contract, and MCP round-trip tests. One FAISS IVF test is skipped on macOS ARM due to a known segfault when running alongside ChromaDB in the same process.
 
 ## Design Principles
 
