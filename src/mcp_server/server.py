@@ -135,8 +135,11 @@ async def _handle_get_document(arguments: dict) -> list[TextContent]:
 
 
 async def main():
-    async with stdio_server() as (read, write):
-        await server.run(read, write, server.create_initialization_options())
+    try:
+        async with stdio_server() as (read, write):
+            await server.run(read, write, server.create_initialization_options())
+    except (BrokenPipeError, ConnectionResetError, KeyboardInterrupt):
+        pass
 
 
 if __name__ == "__main__":

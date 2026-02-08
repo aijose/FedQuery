@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     fedquery_reranker_enabled: bool = False
     fedquery_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
+    # MCP
+    fedquery_use_mcp: bool = True
+
     @property
     def chroma_path(self) -> Path:
         return Path(self.fedquery_chroma_path)
