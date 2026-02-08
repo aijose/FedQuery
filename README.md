@@ -29,8 +29,9 @@ git clone <repo-url> && cd FedQuery
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
-# Set your API key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Configure environment
+cp .env.example .env
+# Edit .env and add your API key (e.g. ANTHROPIC_API_KEY=sk-ant-...)
 
 # Ingest FOMC documents
 fedquery ingest --years 2024
