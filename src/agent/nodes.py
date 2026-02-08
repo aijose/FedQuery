@@ -1,6 +1,7 @@
 """Agent graph nodes for the FOMC RAG workflow."""
 
 import logging
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -135,38 +136,54 @@ def synthesize_answer(state: AgentState) -> dict:
     ]
     response = llm.invoke(messages)
 
-    # Build citations from the chunks used
+    # Parse [Source N] references in order of first appearance (deduplicated)
+    seen = set()
+    cited_indices = []
+    for m in re.findall(r"\[Source\s+(\d+)\]", response.content):
+        idx = int(m)
+        if idx not in seen:
+            seen.add(idx)
+            cited_indices.append(idx)
+
+    # Build citations in first-appearance order
     citations = []
-    for i, chunk in enumerate(chunks):
-        citations.append({
-            "document_name": chunk["document_name"],
-            "document_date": chunk["document_date"],
-            "section_header": chunk["section_header"],
-            "chunk_id": chunk["chunk_id"],
-            "relevance_score": chunk["relevance_score"],
-            "quoted_excerpt": chunk["chunk_text"][:200],
-        })
+    for idx in cited_indices:
+        i = idx - 1  # [Source N] is 1-indexed, chunks list is 0-indexed
+        if 0 <= i < len(chunks):
+            chunk = chunks[i]
+            citations.append({
+                "document_name": chunk["document_name"],
+                "document_date": chunk["document_date"],
+                "section_header": chunk["section_header"],
+                "chunk_id": chunk["chunk_id"],
+                "relevance_score": chunk["relevance_score"],
+                "quoted_excerpt": chunk["chunk_text"][:200],
+                "source_index": idx,
+            })
 
     return {"answer": response.content, "citations": citations}
 
 
 def validate_citations(state: AgentState) -> dict:
-    """Verify each citation maps to an actual retrieved chunk."""
-    valid_chunk_ids = {c["chunk_id"] for c in state.get("retrieved_chunks", [])}
-    chunk_texts = {c["chunk_id"]: c["chunk_text"] for c in state.get("retrieved_chunks", [])}
+    """Verify each citation maps to an actual retrieved chunk.
+
+    Drops any citation whose chunk_id is not in retrieved_chunks
+    (guards against hallucinated source references or state corruption).
+    """
+    chunk_lookup = {
+        c["chunk_id"]: c["chunk_text"]
+        for c in state.get("retrieved_chunks", [])
+    }
 
     validated = []
     for citation in state.get("citations", []):
-        if citation["chunk_id"] in valid_chunk_ids:
-            # Verify quoted excerpt is from the chunk text
-            chunk_text = chunk_texts.get(citation["chunk_id"], "")
-            excerpt = citation.get("quoted_excerpt", "")
-            if excerpt and excerpt in chunk_text:
-                validated.append(citation)
-            else:
-                # Keep citation but with truncated excerpt that exists
-                citation["quoted_excerpt"] = chunk_text[:200] if chunk_text else ""
-                validated.append(citation)
+        chunk_text = chunk_lookup.get(citation["chunk_id"])
+        if chunk_text is None:
+            logger.warning("Dropping citation with unknown chunk_id: %s", citation["chunk_id"])
+            continue
+        # Ensure the excerpt is an actual prefix of the chunk text
+        citation["quoted_excerpt"] = chunk_text[:200]
+        validated.append(citation)
 
     return {"citations": validated}
 
@@ -197,6 +214,20 @@ def respond(state: AgentState) -> dict:
             f"Best matches (low relevance):\n{best_matches}"
         )
         return {"answer": answer, "citations": []}
+
+    # Remap [Source N] references in answer text to sequential [N] numbering
+    source_map = {}
+    for new_idx, c in enumerate(citations, 1):
+        orig_idx = c.get("source_index")
+        if orig_idx is not None:
+            source_map[orig_idx] = new_idx
+
+    def _remap_source_ref(match):
+        orig = int(match.group(1))
+        new = source_map.get(orig)
+        return f"[{new}]" if new is not None else match.group(0)
+
+    answer = re.sub(r"\[Source\s+(\d+)\]", _remap_source_ref, answer)
 
     # Grounded answer with sources
     sources = "\n".join(
