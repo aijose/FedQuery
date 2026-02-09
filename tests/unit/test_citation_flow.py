@@ -123,6 +123,39 @@ class TestSynthesizeAnswerCitationParsing:
         assert result["citations"][1]["chunk_id"] == "ddd"
         assert result["citations"][1]["source_index"] == 4
 
+    @patch("src.agent.nodes.get_llm")
+    def test_comma_separated_sources(self, mock_get_llm):
+        """LLM uses [Source 1, Source 2, Source 3] comma-separated format."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content="The minutes covered inflation [Source 1, Source 2] and labor [Source 3]."
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "test", "retrieved_chunks": CHUNKS}
+        result = synthesize_answer(state)
+
+        assert len(result["citations"]) == 3
+        assert result["citations"][0]["chunk_id"] == "aaa"
+        assert result["citations"][1]["chunk_id"] == "bbb"
+        assert result["citations"][2]["chunk_id"] == "ccc"
+
+    @patch("src.agent.nodes.get_llm")
+    def test_comma_separated_sources_deduped(self, mock_get_llm):
+        """Comma-separated refs with overlap are deduped."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content="Data shows [Source 1, Source 3] and confirms [Source 3, Source 4]."
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "test", "retrieved_chunks": CHUNKS}
+        result = synthesize_answer(state)
+
+        assert len(result["citations"]) == 3
+        ids = [c["chunk_id"] for c in result["citations"]]
+        assert ids == ["aaa", "ccc", "ddd"]
+
 
 class TestValidateCitations:
     """validate_citations should drop citations not in retrieved_chunks."""
@@ -260,6 +293,20 @@ class TestRespondSourceRemapping:
         result = respond(state)
         assert result["answer"] == "No specific information available."
         assert "Sources:" not in result["answer"]
+
+    def test_comma_separated_sources_remapped(self):
+        """[Source 3, Source 5] should be remapped to [1, 2]."""
+        state = {
+            "confidence": "high",
+            "answer": "Inflation eased and rates held [Source 3, Source 5].",
+            "citations": [
+                _make_citation("aaa", source_index=3),
+                _make_citation("bbb", source_index=5),
+            ],
+        }
+        result = respond(state)
+        assert "[1, 2]" in result["answer"]
+        assert "[Source 3, Source 5]" not in result["answer"]
 
     def test_insufficient_confidence_returns_uncertainty(self):
         """Insufficient confidence should return uncertainty message, not remapped sources."""

@@ -45,6 +45,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "query": {"type": "string", "description": "Natural language search query"},
                     "top_k": {"type": "integer", "default": 5, "description": "Number of results (max 20)"},
+                    "where": {"type": "object", "description": "Optional ChromaDB where filter for metadata (e.g. date range)"},
                 },
                 "required": ["query"],
             },
@@ -76,6 +77,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 async def _handle_search_fomc(arguments: dict) -> list[TextContent]:
     query = arguments.get("query", "")
     top_k = min(arguments.get("top_k", 5), 20)
+    where = arguments.get("where")
 
     if not query or len(query) > 1000:
         return [TextContent(type="text", text=json.dumps({"error": "invalid_query"}))]
@@ -86,7 +88,7 @@ async def _handle_search_fomc(arguments: dict) -> list[TextContent]:
 
     provider = _get_embedding_provider()
     query_embedding = provider.embed([query])[0]
-    raw_results = store.query(query_embedding=query_embedding, top_k=top_k)
+    raw_results = store.query(query_embedding=query_embedding, top_k=top_k, where=where)
 
     results = []
     for r in raw_results:

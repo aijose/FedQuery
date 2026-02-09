@@ -83,12 +83,16 @@ class ChromaStore:
         query_embedding: list[float] | None = None,
         query_text: str | None = None,
         top_k: int = 5,
+        where: dict | None = None,
     ) -> list[dict]:
         """Query the collection for similar chunks.
 
         Provide either query_embedding (for pre-embedded queries) or
         query_text (uses ChromaDB's built-in embedding -- not recommended,
         prefer using the EmbeddingProvider externally).
+
+        Args:
+            where: Optional ChromaDB where filter (e.g. date range).
 
         Returns a list of dicts with keys: id, text, metadata, distance.
         """
@@ -101,7 +105,19 @@ class ChromaStore:
         else:
             raise ValueError("Must provide either query_embedding or query_text")
 
-        results = self._collection.query(**kwargs)
+        if where is not None:
+            kwargs["where"] = self._resolve_string_ranges(where)
+
+        try:
+            results = self._collection.query(**kwargs)
+        except Exception:
+            # n_results may exceed matching docs; retry without cap
+            if "where" in kwargs:
+                kwargs.pop("n_results", None)
+                kwargs["n_results"] = self._collection.count()
+                results = self._collection.query(**kwargs)
+            else:
+                raise
 
         output = []
         if results["ids"] and results["ids"][0]:
@@ -127,6 +143,55 @@ class ChromaStore:
                 "metadata": results["metadatas"][i] if results["metadatas"] else {},
             })
         return output
+
+    def _resolve_string_ranges(self, where: dict) -> dict:
+        """Convert $gte/$lte on string fields to $in with exact values.
+
+        ChromaDB only supports $gte/$lte on numeric types. For string
+        metadata like document_date, we resolve the range to an $in
+        filter by scanning distinct values from the collection.
+        """
+        if "$and" not in where:
+            return where
+
+        field_ranges: dict[str, dict] = {}
+        other_clauses = []
+
+        for clause in where["$and"]:
+            is_string_range = False
+            for field, condition in clause.items():
+                if isinstance(condition, dict):
+                    op = next(iter(condition))
+                    val = condition[op]
+                    if op in ("$gte", "$lte") and isinstance(val, str):
+                        field_ranges.setdefault(field, {})[op] = val
+                        is_string_range = True
+            if not is_string_range:
+                other_clauses.append(clause)
+
+        if not field_ranges:
+            return where
+
+        all_meta = self._collection.get(include=["metadatas"])["metadatas"]
+
+        for field, ops in field_ranges.items():
+            gte = ops.get("$gte", "")
+            lte = ops.get("$lte", "\uffff")
+            matching = sorted({
+                m.get(field, "") for m in all_meta
+                if gte <= m.get(field, "") <= lte
+            })
+            if matching:
+                other_clauses.append({field: {"$in": matching}})
+            else:
+                # No values in range — use impossible match to guarantee empty results
+                other_clauses.append({field: {"$in": ["__no_match__"]}})
+
+        if not other_clauses:
+            return where
+        if len(other_clauses) == 1:
+            return other_clauses[0]
+        return {"$and": other_clauses}
 
     @property
     def count(self) -> int:

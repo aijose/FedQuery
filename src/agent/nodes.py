@@ -1,5 +1,6 @@
 """Agent graph nodes for the FOMC RAG workflow."""
 
+import json
 import logging
 import re
 
@@ -35,36 +36,89 @@ def evaluate_confidence_level(avg_score: float) -> str:
 
 
 def assess_query(state: AgentState) -> dict:
-    """Analyze query and determine if retrieval is needed.
+    """Analyze query and determine if retrieval is needed, with date hints.
 
-    Uses LLM to classify query. Most FOMC-related queries need retrieval.
+    Uses LLM to classify query and extract temporal signals.
+    Returns needs_retrieval bool and optional metadata_hints with date range.
     """
     llm = get_llm()
     messages = [
         SystemMessage(content=(
             "You are a query classifier for an FOMC document retrieval system. "
-            "Determine if the user's question requires searching FOMC documents. "
-            "Respond with ONLY 'yes' or 'no'.\n"
+            "Determine if the user's question requires searching FOMC documents, "
+            "and extract any temporal date range from the query.\n\n"
+            "Respond with ONLY a JSON object (no markdown, no explanation):\n"
+            '{"needs_retrieval": true/false, "date_start": "YYYY-MM-DD" or null, '
+            '"date_end": "YYYY-MM-DD" or null}\n\n'
+            "Rules:\n"
             "- Questions about Fed policy, interest rates, inflation, economic outlook, "
-            "FOMC meetings → 'yes'\n"
-            "- Greetings, general knowledge, non-FOMC topics → 'no'"
+            "FOMC meetings → needs_retrieval: true\n"
+            "- Greetings, general knowledge, non-FOMC topics → needs_retrieval: false\n"
+            "- If the query mentions a specific month/year (e.g. 'December 2024'), "
+            "set date_start to the 1st and date_end to the last day of that month\n"
+            "- If a year is mentioned without a month (e.g. '2024'), use the full year range\n"
+            "- If no temporal signal, set both dates to null"
         )),
         HumanMessage(content=state["query"]),
     ]
     response = llm.invoke(messages)
-    needs_retrieval = "yes" in response.content.lower()
-    return {"needs_retrieval": needs_retrieval}
+
+    # Parse JSON response; fall back to yes/no heuristic if parsing fails
+    needs_retrieval = False
+    metadata_hints = None
+
+    # Strip markdown code fences if present (LLMs often wrap JSON in ```json ... ```)
+    text = response.content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+
+    try:
+        parsed = json.loads(text)
+        needs_retrieval = bool(parsed.get("needs_retrieval", False))
+        date_start = parsed.get("date_start")
+        date_end = parsed.get("date_end")
+        if date_start and date_end:
+            metadata_hints = {"date_start": date_start, "date_end": date_end}
+    except (json.JSONDecodeError, AttributeError):
+        logger.debug("assess_query JSON parse failed, falling back to yes/no heuristic")
+        needs_retrieval = "yes" in response.content.lower() or "true" in response.content.lower()
+
+    return {"needs_retrieval": needs_retrieval, "metadata_hints": metadata_hints}
 
 
 def search_corpus(state: AgentState, search_fn) -> dict:
     """Search the FOMC corpus using the provided search function.
 
-    search_fn should accept (query: str, top_k: int) and return
-    a list of ChunkResult dicts.
+    Uses two-pass retrieval when date hints are present:
+    1. Filtered pass with date range where clause (priority results)
+    2. Unfiltered pass to fill remaining slots
+    Results are merged and deduped to top 10.
+
+    search_fn should accept (query: str, top_k: int, where: dict | None)
+    and return a list of ChunkResult dicts.
     """
     query = state.get("reformulated_query") or state["query"]
-    results = search_fn(query, top_k=10)
-    return {"retrieved_chunks": results}
+    hints = state.get("metadata_hints")
+
+    if hints and hints.get("date_start"):
+        where = {"$and": [
+            {"document_date": {"$gte": hints["date_start"]}},
+            {"document_date": {"$lte": hints["date_end"]}},
+        ]}
+        filtered = search_fn(query, top_k=10, where=where)
+        unfiltered = search_fn(query, top_k=10)
+
+        # Merge: filtered results first (priority), then fill from unfiltered
+        seen = {r["chunk_id"] for r in filtered}
+        merged = list(filtered)
+        for r in unfiltered:
+            if r["chunk_id"] not in seen:
+                merged.append(r)
+                seen.add(r["chunk_id"])
+        return {"retrieved_chunks": merged[:10]}
+    else:
+        return {"retrieved_chunks": search_fn(query, top_k=10)}
 
 
 def evaluate_confidence(state: AgentState) -> dict:
@@ -136,14 +190,15 @@ def synthesize_answer(state: AgentState) -> dict:
     ]
     response = llm.invoke(messages)
 
-    # Parse [Source N] references in order of first appearance (deduplicated)
+    # Parse [Source N] and [Source N, Source M, ...] references (deduplicated, first-appearance order)
     seen = set()
     cited_indices = []
-    for m in re.findall(r"\[Source\s+(\d+)\]", response.content):
-        idx = int(m)
-        if idx not in seen:
-            seen.add(idx)
-            cited_indices.append(idx)
+    for block in re.finditer(r"\[Sources?\s+[^\]]+\]", response.content):
+        for m in re.findall(r"(\d+)", block.group()):
+            idx = int(m)
+            if idx not in seen:
+                seen.add(idx)
+                cited_indices.append(idx)
 
     # Build citations in first-appearance order
     citations = []
@@ -222,12 +277,15 @@ def respond(state: AgentState) -> dict:
         if orig_idx is not None:
             source_map[orig_idx] = new_idx
 
-    def _remap_source_ref(match):
-        orig = int(match.group(1))
-        new = source_map.get(orig)
-        return f"[{new}]" if new is not None else match.group(0)
+    def _remap_source_block(match):
+        block = match.group(0)
+        nums = re.findall(r"(\d+)", block)
+        remapped = [str(source_map[int(n)]) for n in nums if int(n) in source_map]
+        if remapped:
+            return "[" + ", ".join(remapped) + "]"
+        return block
 
-    answer = re.sub(r"\[Source\s+(\d+)\]", _remap_source_ref, answer)
+    answer = re.sub(r"\[Sources?\s+[^\]]+\]", _remap_source_block, answer)
 
     # Grounded answer with sources
     sources = "\n".join(

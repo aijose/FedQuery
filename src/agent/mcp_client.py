@@ -76,15 +76,18 @@ class MCPSearchClient:
         future = asyncio.run_coroutine_threadsafe(_connect(), self._loop)
         future.result(timeout=30)
 
-    def search(self, query: str, top_k: int = 5) -> list[ChunkResult]:
+    def search(self, query: str, top_k: int = 5, where: dict | None = None) -> list[ChunkResult]:
         """Call search_fomc tool via MCP protocol."""
         if not self._session:
             raise RuntimeError("MCPSearchClient not connected")
 
         async def _search():
+            args = {"query": query, "top_k": top_k}
+            if where is not None:
+                args["where"] = where
             result = await self._session.call_tool(
                 "search_fomc",
-                arguments={"query": query, "top_k": top_k},
+                arguments=args,
             )
             text = result.content[0].text
             return json.loads(text)
@@ -161,9 +164,9 @@ def create_mcp_search_fn(
     Reranking stays client-side: over-fetches 3x via MCP, reranks locally.
     """
 
-    def search_fn(query: str, top_k: int = 5) -> list[ChunkResult]:
+    def search_fn(query: str, top_k: int = 5, where: dict | None = None) -> list[ChunkResult]:
         fetch_k = top_k * 3 if reranker else top_k
-        results = mcp_client.search(query, top_k=fetch_k)
+        results = mcp_client.search(query, top_k=fetch_k, where=where)
 
         if reranker and results:
             reranked = reranker.rerank(
@@ -199,10 +202,10 @@ def create_direct_search_fn(
     This is the fast dev/debug path — same interface as MCP mode.
     """
 
-    def search_fn(query: str, top_k: int = 5) -> list[ChunkResult]:
+    def search_fn(query: str, top_k: int = 5, where: dict | None = None) -> list[ChunkResult]:
         fetch_k = top_k * 3 if reranker else top_k
         query_embedding = embedding_provider.embed([query])[0]
-        raw_results = store.query(query_embedding=query_embedding, top_k=fetch_k)
+        raw_results = store.query(query_embedding=query_embedding, top_k=fetch_k, where=where)
 
         results = []
         for r in raw_results:

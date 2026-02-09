@@ -24,3 +24,4 @@ class AgentState(TypedDict):
     answer: str | None
     citations: list[dict]
     needs_retrieval: bool
+    metadata_hints: dict | None
