@@ -12,14 +12,16 @@ class AgentState(TypedDict):
     answer: str | None                      # Final synthesized answer
     citations: list[Citation]               # Citations for the answer
     needs_retrieval: bool                   # Whether retrieval is needed
+    metadata_hints: dict | None             # {"date_start": "YYYY-MM-DD", "date_end": "YYYY-MM-DD"} or None
+    top_k_hint: int | None                  # LLM-estimated result count (1-50) or None for default (10)
 ```
 
 ## Graph Nodes
 
 | Node | Description | Input State | Output State |
 |------|-------------|-------------|--------------|
-| `assess_query` | Analyze user question, determine if retrieval is needed | `query` | `needs_retrieval` |
-| `search_corpus` | Call `search_fomc` MCP tool | `query` or `reformulated_query` | `retrieved_chunks` |
+| `assess_query` | Analyze query, extract date hints and top_k estimate | `query` | `needs_retrieval`, `metadata_hints`, `top_k_hint` |
+| `search_corpus` | Two-pass retrieval (filtered + unfiltered when date hints present) | `query` or `reformulated_query`, `metadata_hints`, `top_k_hint` | `retrieved_chunks` |
 | `evaluate_confidence` | Assess relevance scores of retrieved chunks | `retrieved_chunks` | `confidence` |
 | `reformulate_query` | Rephrase query for better retrieval | `query`, `retrieved_chunks` | `reformulated_query`, `reformulation_attempts` |
 | `synthesize_answer` | Generate answer grounded in retrieved chunks | `query`, `retrieved_chunks` | `answer`, `citations` |
@@ -83,10 +85,12 @@ class AgentState(TypedDict):
 
 | Level | Relevance Score Range | Action |
 |-------|----------------------|--------|
-| `high` | avg score ≥ 0.80 | Synthesize directly |
-| `medium` | avg score ≥ 0.60 | Synthesize with caveats |
-| `low` | avg score ≥ 0.40 | Reformulate and retry |
-| `insufficient` | avg score < 0.40 | Return uncertainty message |
+| `high` | avg score ≥ 0.55 | Synthesize answer |
+| `medium` | avg score ≥ 0.40 | Synthesize answer |
+| `low` | avg score ≥ 0.25 | Reformulate and retry |
+| `insufficient` | avg score < 0.25 | Return uncertainty message |
+
+> **Note**: Thresholds were recalibrated from the original spec (0.80/0.60/0.40) to match all-MiniLM-L6-v2 cosine similarity on the FOMC corpus, where relevant queries typically score 0.55-0.70.
 
 ## Response Formats
 

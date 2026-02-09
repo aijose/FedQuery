@@ -9,7 +9,8 @@
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `query` | string | Yes | — | Natural language search query |
-| `top_k` | integer | No | 5 | Number of results to return (max 20) |
+| `top_k` | integer | No | 5 | Number of results to return (max 50) |
+| `where` | object | No | — | ChromaDB metadata filter (e.g., `{"$and": [{"document_date": {"$gte": "2024-01-01"}}, {"document_date": {"$lte": "2024-12-31"}}]}`) |
 
 ### Response
 

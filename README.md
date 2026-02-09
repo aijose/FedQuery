@@ -77,6 +77,10 @@ This enables human-readable citations without a full document parser — each ch
 
 **Bi-encoder search**: Queries are embedded with all-MiniLM-L6-v2 and matched against chunks via cosine similarity in ChromaDB. ChromaDB returns cosine *distance* in [0, 2], converted to similarity as `1.0 - distance / 2.0`.
 
+**Two-pass date-filtered retrieval**: Temporal queries (e.g., "December 2024", "all of 2021") are detected by the `assess_query` LLM call, which extracts `date_start`/`date_end` hints. When present, `search_corpus` runs two passes: (1) a filtered pass with a ChromaDB `where` clause constraining `document_date` to the target range, then (2) an unfiltered pass. Results are merged with filtered chunks prioritized, deduped, and capped at `top_k`. This ensures date-specific content surfaces even when FOMC documents use near-identical template language across meetings.
+
+**Adaptive retrieval count (`top_k_hint`)**: The `assess_query` node estimates how many search results are needed based on query scope. Single-meeting queries use the default (10), full-year queries request ~30 (to cover all ~8 FOMC meetings), and multi-year queries request 40-50. This prevents the bi-encoder's tendency to cluster results from a few meetings when documents share similar language.
+
 **Cross-encoder reranking** (optional, `FEDQUERY_RERANKER_ENABLED=true`): When enabled, the retriever over-fetches 3x candidates from the bi-encoder, then reranks with `cross-encoder/ms-marco-MiniLM-L-6-v2`. This improves precision at the cost of latency — the cross-encoder scores each (query, chunk) pair individually rather than comparing pre-computed embeddings.
 
 **Embedding provider interface**: The `EmbeddingProvider` abstraction allows swapping models (e.g., to a larger model like `all-mpnet-base-v2`) by changing one config variable.
@@ -84,23 +88,28 @@ This enables human-readable citations without a full document parser — each ch
 ### Agent Workflow (LangGraph)
 
 ```
-assess_query → search_corpus → evaluate_confidence
-                                      │
-                    ┌─────────────────┼──────────────────┐
-                    │                 │                   │
-              confidence ≥       confidence =       insufficient
-               "medium"            "low" &          or max retries
-                    │            attempts < 2             │
-                    ▼                 ▼                   ▼
-           synthesize_answer   reformulate_query      respond
-                    │                 │            (uncertainty)
-                    ▼                 └→ search_corpus
-           validate_citations
-                    │
-                    ▼
-                 respond
+                        ┌─── no retrieval needed ───→ respond
+                        │
+assess_query ───────────┤
+ (date hints,           │
+  top_k_hint)           └─── needs retrieval ──→ search_corpus → evaluate_confidence
+                                                 (two-pass if         │
+                                                  date hints)  ┌──────┼──────────────────┐
+                                                               │      │                   │
+                                                         confidence ≥ confidence =     insufficient
+                                                          "medium"      "low" &        or max retries
+                                                               │     attempts < 2          │
+                                                               ▼          ▼                ▼
+                                                      synthesize_answer  reformulate     respond
+                                                               │          _query      (uncertainty)
+                                                               ▼          │
+                                                      validate_citations  └→ search_corpus
+                                                               │
+                                                               ▼
+                                                            respond
 ```
 
+- **Query assessment**: The LLM classifies the query, extracts date ranges for temporal filtering, and estimates `top_k_hint` (how many results to retrieve based on query scope)
 - **Confidence thresholds**: high ≥ 0.55, medium ≥ 0.40, low ≥ 0.25, insufficient < 0.25 (calibrated for all-MiniLM-L6-v2 cosine similarity)
 - **Reformulation**: When confidence is low, the agent rephrases the query and retries (max 2 attempts)
 - **Uncertainty handling**: When evidence is insufficient, the system explicitly says so rather than fabricating an answer
@@ -109,7 +118,7 @@ assess_query → search_corpus → evaluate_confidence
 
 Citations are enforced through a three-stage pipeline:
 
-1. **`synthesize_answer`**: The LLM is prompted to cite sources as `[Source N]` references. After generation, the node parses which `[Source N]` markers actually appear in the output text and builds citations *only* for referenced chunks, ordered by first appearance.
+1. **`synthesize_answer`**: The LLM is prompted to cite sources as `[Source N]` references. After generation, the node parses which `[Source N]` markers actually appear in the output text — including comma-separated groups like `[Source 1, Source 2, Source 3]` — and builds citations *only* for referenced chunks, ordered by first appearance.
 2. **`validate_citations`**: Each citation's `chunk_id` is verified against the set of retrieved chunks. Citations referencing unknown chunk IDs are dropped.
 3. **`respond`**: Source references are remapped to sequential numbering (`[1]`, `[2]`, ...) matching the Sources footer, so the final output never has gaps like `[1], [3]`.
 
@@ -135,7 +144,7 @@ Two tools exposed via the MCP Python SDK (stdio transport):
 
 | Tool | Purpose |
 |------|---------|
-| `search_fomc(query, top_k)` | Semantic search across the vector store |
+| `search_fomc(query, top_k, where?)` | Semantic search across the vector store, with optional metadata filter |
 | `get_document(doc_id)` | Fetch full document content by ID |
 
 By default (`FEDQUERY_USE_MCP=true`), the CLI spawns the MCP server as a subprocess and communicates via stdio — the same pattern Claude Desktop uses for local MCP tools. The server loads the embedding model and ChromaDB store in its own process, and the agent issues `search_fomc` / `get_document` tool calls over the MCP protocol.
@@ -188,6 +197,7 @@ Both hit 100% recall on real FOMC queries — the recall gap only appears on ran
 ```bash
 fedquery ingest --years 2023 2024    # Download and index FOMC documents
 fedquery ask "your question here"     # Ask a question with citations
+fedquery evaluate                     # Run retrieval quality evaluation
 fedquery benchmark                    # Run HNSW vs IVF comparison
 ```
 
@@ -196,7 +206,7 @@ fedquery benchmark                    # Run HNSW vs IVF comparison
 ```
 src/
 ├── agent/           # LangGraph workflow, state, nodes
-├── cli/             # Typer CLI commands (ask, ingest, benchmark)
+├── cli/             # Typer CLI commands (ask, ingest, evaluate, benchmark)
 ├── embedding/       # EmbeddingProvider interface + sentence-transformers
 ├── ingestion/       # Scraper, cleaner, chunker, pipeline
 ├── llm/             # LLM configuration (LangChain abstraction)
@@ -217,7 +227,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-158 tests covering unit, integration, contract, and MCP round-trip tests. One FAISS IVF test is skipped on macOS ARM due to a known segfault when running alongside ChromaDB in the same process.
+192 tests covering unit, integration, contract, and MCP round-trip tests. One FAISS IVF test is skipped on macOS ARM due to a known segfault when running alongside ChromaDB in the same process.
 
 ## Design Principles
 
