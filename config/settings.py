@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
 
     # Embedding
-    fedquery_embedding_model: str = "all-MiniLM-L6-v2"
+    fedquery_embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     # LLM
     fedquery_llm_provider: str = "anthropic"

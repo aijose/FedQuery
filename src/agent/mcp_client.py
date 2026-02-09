@@ -204,7 +204,7 @@ def create_direct_search_fn(
 
     def search_fn(query: str, top_k: int = 5, where: dict | None = None) -> list[ChunkResult]:
         fetch_k = top_k * 3 if reranker else top_k
-        query_embedding = embedding_provider.embed([query])[0]
+        query_embedding = embedding_provider.embed_query([query])[0]
         raw_results = store.query(query_embedding=query_embedding, top_k=fetch_k, where=where)
 
         results = []

@@ -7,13 +7,16 @@ from sentence_transformers import SentenceTransformer
 from src.embedding.provider import EmbeddingProvider
 
 
+_BGE_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
+
+
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
     """Embedding provider wrapping sentence-transformers models.
 
-    Default model: all-MiniLM-L6-v2 (384 dimensions, ~80MB).
+    Default model: BAAI/bge-small-en-v1.5 (384 dimensions, 512 max_seq_length).
     """
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         # Suppress safetensors LOAD REPORT (written to fd 1 by C code)
         # and tqdm progress bars during model loading.
         old_verbosity = os.environ.get("TRANSFORMERS_VERBOSITY")
@@ -38,6 +41,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
                 os.environ.pop("TRANSFORMERS_VERBOSITY", None)
             else:
                 os.environ["TRANSFORMERS_VERBOSITY"] = old_verbosity
+        self._model_name = model_name
         self._dimension = self._model.get_sentence_embedding_dimension()
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -45,6 +49,14 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             raise ValueError("texts must not be empty")
         embeddings = self._model.encode(texts, show_progress_bar=False)
         return embeddings.tolist()
+
+    def embed_query(self, texts: list[str]) -> list[list[float]]:
+        """Embed query texts, prepending BGE instruction prefix when applicable."""
+        if not texts:
+            raise ValueError("texts must not be empty")
+        if "bge" in self._model_name.lower():
+            texts = [_BGE_QUERY_INSTRUCTION + t for t in texts]
+        return self.embed(texts)
 
     @property
     def dimension(self) -> int:

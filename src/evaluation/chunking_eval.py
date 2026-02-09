@@ -84,7 +84,7 @@ def _create_search_fn_for_store(
 ):
     """Create a search function for evaluation from a ChromaStore."""
     def search_fn(query: str, top_k: int) -> list[dict]:
-        query_embedding = embedding_provider.embed([query])[0]
+        query_embedding = embedding_provider.embed_query([query])[0]
         raw_results = store.query(query_embedding=query_embedding, top_k=top_k)
         results = []
         for r in raw_results:

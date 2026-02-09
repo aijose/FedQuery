@@ -7,7 +7,7 @@ import logging
 
 from src.embedding.sentence_transformer import SentenceTransformerEmbeddingProvider
 from src.ingestion.chunker import chunk_document
-from src.ingestion.scraper import scrape_fomc_documents
+from src.ingestion.scraper import load_local_documents, scrape_fomc_documents
 from src.ingestion.text_writer import save_document_chunks, save_document_html, save_document_text
 from src.models.document import FOMCDocument
 from src.vectorstore.chroma_store import ChromaStore
@@ -39,11 +39,15 @@ def run_ingestion_pipeline(
     if store is None:
         store = ChromaStore(path=str(settings.chroma_path))
 
-    embedding_provider = SentenceTransformerEmbeddingProvider()
+    embedding_provider = SentenceTransformerEmbeddingProvider(settings.fedquery_embedding_model)
 
-    # Step 1: Scrape documents
-    documents = scrape_fomc_documents(years)
-    logger.info("Scraped %d documents", len(documents))
+    # Step 1: Load documents — try local files first, fall back to web scraping
+    documents = load_local_documents(years, settings.text_path, settings.html_path)
+    if documents:
+        logger.info("Loaded %d documents from local files", len(documents))
+    else:
+        documents = scrape_fomc_documents(years)
+        logger.info("Scraped %d documents from web", len(documents))
 
     documents_ingested = 0
     documents_skipped = 0

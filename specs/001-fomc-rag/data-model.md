@@ -87,7 +87,7 @@ A segment of an FOMC document sized for embedding and retrieval. Chunks are prod
 | `chunk_text`     | `str`          | NOT NULL, must not be empty                          | Text content of this chunk                               |
 | `chunk_index`    | `int`          | NOT NULL, >= 0                                       | Zero-based position of this chunk within its document    |
 | `section_header` | `str` or null  | Nullable                                             | Section heading captured via regex during chunking       |
-| `embedding`      | `list[float]`  | NOT NULL, length must equal 384                      | Dense vector from `all-MiniLM-L6-v2` embedding model    |
+| `embedding`      | `list[float]`  | NOT NULL, length must equal 384                      | Dense vector from embedding model (default: bge-small-en-v1.5) |
 | `token_count`    | `int`          | NOT NULL, > 0                                        | Token count of `chunk_text` (used for context budgeting) |
 
 **Relationships**:
@@ -97,7 +97,7 @@ A segment of an FOMC document sized for embedding and retrieval. Chunks are prod
 **Validation Rules**:
 - `chunk_text` must not be empty string
 - `chunk_index` must be >= 0
-- `embedding` dimension must be 384 (matching `all-MiniLM-L6-v2` output dimension)
+- `embedding` dimension must be 384 (matching bge-small-en-v1.5 output dimension)
 - `(document_id, chunk_index)` should be unique (no duplicate chunk positions within a document)
 
 ---
@@ -193,7 +193,7 @@ ChromaDB stores documents as a flat collection of items, each with an ID, an emb
 | ChromaDB Field  | Source                          | Description                                          |
 |-----------------|---------------------------------|------------------------------------------------------|
 | `id`            | `DocumentChunk.id`              | Unique chunk ID (UUID string)                        |
-| `embedding`     | `DocumentChunk.embedding`       | 384-dim float vector from `all-MiniLM-L6-v2`        |
+| `embedding`     | `DocumentChunk.embedding`       | 384-dim float vector from embedding model            |
 | `document`      | `DocumentChunk.chunk_text`      | The chunk text stored for retrieval and display      |
 | `metadata`      | (see below)                     | Structured metadata for filtering and traceability   |
 
@@ -217,7 +217,7 @@ ChromaDB stores documents as a flat collection of items, each with an ID, an emb
 
 ### EmbeddingProvider
 
-Abstraction over the embedding model used to convert text into dense vectors. The default implementation wraps `sentence-transformers/all-MiniLM-L6-v2`.
+Abstraction over the embedding model used to convert text into dense vectors. The default implementation wraps `BAAI/bge-small-en-v1.5`.
 
 ```python
 from abc import ABC, abstractmethod
@@ -236,7 +236,7 @@ class EmbeddingProvider(ABC):
         Returns:
             List of embedding vectors. Each vector is a list of floats
             with dimension matching the model configuration (384 for
-            all-MiniLM-L6-v2).
+            bge-small-en-v1.5).
 
         Raises:
             ValueError: If texts is empty.
@@ -250,7 +250,7 @@ class EmbeddingProvider(ABC):
         ...
 ```
 
-**Default implementation**: `SentenceTransformerEmbeddingProvider` wrapping `all-MiniLM-L6-v2` (384 dimensions, runs locally).
+**Default implementation**: `SentenceTransformerEmbeddingProvider` wrapping `BAAI/bge-small-en-v1.5` (384 dimensions, 512 max_seq_length, runs locally).
 
 ---
 

@@ -11,8 +11,8 @@ from src.llm.config import get_llm
 
 logger = logging.getLogger(__name__)
 
-# Confidence thresholds calibrated for all-MiniLM-L6-v2 cosine similarity
-# on the FOMC corpus (relevant queries typically score 0.55-0.70)
+# Confidence thresholds calibrated for cosine similarity on the FOMC corpus
+# (may need recalibration after switching embedding models)
 CONFIDENCE_THRESHOLDS = {
     "high": 0.55,
     "medium": 0.40,

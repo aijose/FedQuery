@@ -89,6 +89,7 @@ class TestEvaluateChunkingGrid:
 
         mock_provider = MagicMock()
         mock_provider.embed.return_value = [[0.1] * 384] * 100  # enough for any number of chunks
+        mock_provider.embed_query.return_value = [[0.1] * 384]
 
         grid = [
             {"chunk_size": 256, "chunk_overlap": 25},
@@ -111,6 +112,7 @@ class TestEvaluateChunkingGrid:
         docs = load_documents_from_text_dir(text_dir)
         mock_provider = MagicMock()
         mock_provider.embed.return_value = [[0.1] * 384] * 100
+        mock_provider.embed_query.return_value = [[0.1] * 384]
 
         grid = [{"chunk_size": 512, "chunk_overlap": 50}]
 

@@ -26,6 +26,15 @@ class EmbeddingProvider(ABC):
         """
         ...
 
+    def embed_query(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for query texts.
+
+        Some models (e.g., BGE) require a special instruction prefix for
+        queries but not for documents. Override this method to add
+        model-specific query preprocessing. Default delegates to embed().
+        """
+        return self.embed(texts)
+
     @property
     @abstractmethod
     def dimension(self) -> int:

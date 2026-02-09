@@ -30,7 +30,8 @@ def _get_store() -> ChromaStore:
 def _get_embedding_provider() -> SentenceTransformerEmbeddingProvider:
     global _embedding_provider
     if _embedding_provider is None:
-        _embedding_provider = SentenceTransformerEmbeddingProvider()
+        settings = get_settings()
+        _embedding_provider = SentenceTransformerEmbeddingProvider(settings.fedquery_embedding_model)
     return _embedding_provider
 
 
@@ -87,7 +88,7 @@ async def _handle_search_fomc(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps({"error": "empty_corpus"}))]
 
     provider = _get_embedding_provider()
-    query_embedding = provider.embed([query])[0]
+    query_embedding = provider.embed_query([query])[0]
     raw_results = store.query(query_embedding=query_embedding, top_k=top_k, where=where)
 
     results = []

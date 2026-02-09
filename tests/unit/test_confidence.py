@@ -1,6 +1,6 @@
 """Unit tests for confidence evaluation thresholds.
 
-Thresholds calibrated for all-MiniLM-L6-v2 cosine similarity on FOMC corpus:
+Thresholds calibrated for cosine similarity on FOMC corpus:
 high ≥ 0.55, medium ≥ 0.40, low ≥ 0.25, insufficient < 0.25.
 """
 

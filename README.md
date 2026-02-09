@@ -51,12 +51,12 @@ federalreserve.gov → Scraper → Cleaner → Chunker → Embedder → ChromaDB
 - **Scraper** (`src/ingestion/scraper.py`): Fetches FOMC calendar pages, extracts statement and minutes URLs, downloads HTML documents.
 - **Cleaner** (`src/ingestion/cleaner.py`): Strips HTML, normalizes whitespace, handles tables gracefully.
 - **Chunker** (`src/ingestion/chunker.py`): Recursive character splitting (~512 tokens, ~50 token overlap) with FOMC section header detection via regex. Section headers like "Participants' Views on Current Conditions" and "Committee Policy Action" are captured as chunk metadata.
-- **Embedder**: all-MiniLM-L6-v2 (384 dimensions) via a swappable `EmbeddingProvider` interface.
+- **Embedder**: BAAI/bge-small-en-v1.5 (384 dimensions, 512 max_seq_length) via a swappable `EmbeddingProvider` interface.
 - **Vector Store**: ChromaDB with cosine similarity, storing 7 metadata fields per chunk.
 
 ### Chunking Strategy
 
-**Parameters**: ~512 tokens per chunk, ~50 token overlap. These were chosen through grid evaluation — 512 keeps enough context for FOMC policy language while staying well within embedding model limits (all-MiniLM-L6-v2 supports 256 word pieces, but longer inputs still produce meaningful pooled embeddings). The 50-token overlap ensures cross-chunk concepts (e.g., a policy rationale split across paragraphs) aren't lost at boundaries.
+**Parameters**: ~512 tokens per chunk, ~50 token overlap. These were chosen through grid evaluation — 512 keeps enough context for FOMC policy language. The embedding model (bge-small-en-v1.5) supports 512 max_seq_length, so the full chunk text is embedded without truncation. The 50-token overlap ensures cross-chunk concepts (e.g., a policy rationale split across paragraphs) aren't lost at boundaries.
 
 **Boundary handling**: Recursive character splitting tries paragraph breaks first (`\n\n`), then sentence breaks, then word boundaries. Overlap text snaps to word boundaries to avoid mid-word splits.
 
@@ -75,7 +75,7 @@ This enables human-readable citations without a full document parser — each ch
 
 ### Retrieval Design
 
-**Bi-encoder search**: Queries are embedded with all-MiniLM-L6-v2 and matched against chunks via cosine similarity in ChromaDB. ChromaDB returns cosine *distance* in [0, 2], converted to similarity as `1.0 - distance / 2.0`.
+**Bi-encoder search**: Queries are embedded with bge-small-en-v1.5 (with a BGE-specific query instruction prefix) and matched against chunks via cosine similarity in ChromaDB. ChromaDB returns cosine *distance* in [0, 2], converted to similarity as `1.0 - distance / 2.0`.
 
 **Two-pass date-filtered retrieval**: Temporal queries (e.g., "December 2024", "all of 2021") are detected by the `assess_query` LLM call, which extracts `date_start`/`date_end` hints. When present, `search_corpus` runs two passes: (1) a filtered pass with a ChromaDB `where` clause constraining `document_date` to the target range, then (2) an unfiltered pass. Results are merged with filtered chunks prioritized, deduped, and capped at `top_k`. This ensures date-specific content surfaces even when FOMC documents use near-identical template language across meetings.
 
@@ -83,7 +83,7 @@ This enables human-readable citations without a full document parser — each ch
 
 **Cross-encoder reranking** (optional, `FEDQUERY_RERANKER_ENABLED=true`): When enabled, the retriever over-fetches 3x candidates from the bi-encoder, then reranks with `cross-encoder/ms-marco-MiniLM-L-6-v2`. This improves precision at the cost of latency — the cross-encoder scores each (query, chunk) pair individually rather than comparing pre-computed embeddings.
 
-**Embedding provider interface**: The `EmbeddingProvider` abstraction allows swapping models (e.g., to a larger model like `all-mpnet-base-v2`) by changing one config variable.
+**Embedding provider interface**: The `EmbeddingProvider` abstraction allows swapping models by changing the `FEDQUERY_EMBEDDING_MODEL` config variable. The provider supports model-specific query preprocessing (e.g., BGE instruction prefix) via the `embed_query()` method.
 
 ### Agent Workflow (LangGraph)
 
@@ -110,7 +110,7 @@ assess_query ───────────┤
 ```
 
 - **Query assessment**: The LLM classifies the query, extracts date ranges for temporal filtering, and estimates `top_k_hint` (how many results to retrieve based on query scope)
-- **Confidence thresholds**: high ≥ 0.55, medium ≥ 0.40, low ≥ 0.25, insufficient < 0.25 (calibrated for all-MiniLM-L6-v2 cosine similarity)
+- **Confidence thresholds**: high ≥ 0.55, medium ≥ 0.40, low ≥ 0.25, insufficient < 0.25 (may need recalibration after embedding model changes)
 - **Reformulation**: When confidence is low, the agent rephrases the query and retries (max 2 attempts)
 - **Uncertainty handling**: When evidence is insufficient, the system explicitly says so rather than fabricating an answer
 
@@ -182,7 +182,7 @@ Both hit 100% recall on real FOMC queries — the recall gap only appears on ran
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key for Claude |
-| `FEDQUERY_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model |
+| `FEDQUERY_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Sentence-transformers model |
 | `FEDQUERY_LLM_PROVIDER` | `anthropic` | LLM provider (`anthropic` or `google`) |
 | `FEDQUERY_LLM_MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
 | `FEDQUERY_CHROMA_PATH` | `./data/chroma` | ChromaDB persistence path |

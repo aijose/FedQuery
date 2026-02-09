@@ -120,7 +120,7 @@ def _build_direct_search(settings):
         )
         raise typer.Exit(1)
 
-    embedding_provider = SentenceTransformerEmbeddingProvider()
+    embedding_provider = SentenceTransformerEmbeddingProvider(settings.fedquery_embedding_model)
     reranker = _get_reranker(settings)
     search_fn = create_direct_search_fn(store, embedding_provider, reranker)
     logger.info("Direct mode: in-process ChromaStore")

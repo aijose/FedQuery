@@ -24,4 +24,4 @@ class DocumentChunk:
         if self.token_count <= 0:
             raise ValueError("token_count must be > 0")
         if self.embedding and len(self.embedding) != 384:
-            raise ValueError(f"embedding dimension must be 384, got {len(self.embedding)}")
+            raise ValueError(f"embedding dimension must be 384, got {len(self.embedding)}")  # bge-small-en-v1.5 is also 384-dim

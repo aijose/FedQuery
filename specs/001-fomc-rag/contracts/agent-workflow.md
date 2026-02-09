@@ -90,7 +90,7 @@ class AgentState(TypedDict):
 | `low` | avg score ≥ 0.25 | Reformulate and retry |
 | `insufficient` | avg score < 0.25 | Return uncertainty message |
 
-> **Note**: Thresholds were recalibrated from the original spec (0.80/0.60/0.40) to match all-MiniLM-L6-v2 cosine similarity on the FOMC corpus, where relevant queries typically score 0.55-0.70.
+> **Note**: Thresholds were recalibrated from the original spec (0.80/0.60/0.40) to match cosine similarity on the FOMC corpus. These may need further recalibration when switching embedding models (currently bge-small-en-v1.5).
 
 ## Response Formats
 
