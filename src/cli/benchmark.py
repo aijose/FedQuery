@@ -8,7 +8,12 @@ import typer
 from rich.console import Console
 
 from config.settings import get_settings
-from src.vectorstore.benchmark import format_benchmark_report, run_benchmark
+from src.vectorstore.benchmark import (
+    format_benchmark_report,
+    format_sweep_report,
+    run_benchmark,
+    run_parameter_sweep,
+)
 from src.vectorstore.chroma_store import ChromaStore
 
 console = Console()
@@ -20,6 +25,10 @@ def benchmark(
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose logging"),
+    ] = False,
+    sweep: Annotated[
+        bool,
+        typer.Option("--sweep", help="Run full parameter sweep with recall-matched comparison"),
     ] = False,
 ):
     """Run HNSW vs IVF benchmark on the FOMC corpus."""
@@ -49,9 +58,14 @@ def benchmark(
 
     console.print(f"Loaded {len(embeddings)} embeddings ({embeddings.shape[1]} dimensions)")
 
-    with console.status("[bold green]Running benchmark..."):
-        results = run_benchmark(embeddings)
+    if sweep:
+        with console.status("[bold green]Running parameter sweep (this may take a minute)..."):
+            results = run_parameter_sweep(embeddings)
+        report = format_sweep_report(results)
+    else:
+        with console.status("[bold green]Running benchmark..."):
+            results = run_benchmark(embeddings)
+        report = format_benchmark_report(results)
 
-    report = format_benchmark_report(results)
     console.print()
     console.print(report)

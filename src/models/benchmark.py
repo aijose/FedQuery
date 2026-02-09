@@ -16,6 +16,11 @@ class BenchmarkResult:
     recall_at_k: float
     memory_usage_mb: float
     corpus_size: int
+    params: dict = field(default_factory=dict)
+    recall_at_10: float = 0.0
+    p50_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    index_size_kb: float = 0.0
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = field(default_factory=datetime.now)
 
