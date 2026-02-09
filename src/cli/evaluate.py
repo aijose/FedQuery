@@ -151,9 +151,11 @@ def evaluate(
         return [
             {
                 "chunk_text": r["chunk_text"],
+                "document_name": r.get("document_name", ""),
                 "document_type": r.get("document_type", ""),
                 "document_date": r.get("document_date", ""),
                 "metadata": {
+                    "document_title": r.get("document_name", ""),
                     "document_type": r.get("document_type", ""),
                     "document_date": r.get("document_date", ""),
                 },

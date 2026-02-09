@@ -61,6 +61,7 @@ def ask(
             "citations": [],
             "needs_retrieval": True,
             "metadata_hints": None,
+            "top_k_hint": None,
         }
 
         with console.status("[bold green]Thinking..."):

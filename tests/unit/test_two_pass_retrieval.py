@@ -111,8 +111,8 @@ class TestTwoPassRetrieval:
         # Filtered first, even though unfiltered have higher scores
         assert ids[:2] == ["f1", "f2"]
 
-    def test_two_pass_capped_at_10(self):
-        """Merged results should be capped at 10."""
+    def test_two_pass_capped_at_default_10(self):
+        """Merged results should be capped at default top_k=10."""
         def mock_search(query, top_k=5, where=None):
             if where is not None:
                 return [_make_chunk(f"f{i}") for i in range(8)]
@@ -126,6 +126,45 @@ class TestTwoPassRetrieval:
         result = search_corpus(state, mock_search)
 
         assert len(result["retrieved_chunks"]) == 10
+
+    def test_top_k_hint_overrides_default(self):
+        """top_k_hint from assess_query should control result count."""
+        calls = []
+
+        def mock_search(query, top_k=5, where=None):
+            calls.append({"top_k": top_k, "where": where})
+            return [_make_chunk(f"c{i}") for i in range(top_k)]
+
+        state = {
+            "query": "test",
+            "metadata_hints": None,
+            "top_k_hint": 25,
+        }
+        result = search_corpus(state, mock_search)
+
+        assert calls[0]["top_k"] == 25
+        assert len(result["retrieved_chunks"]) == 25
+
+    def test_top_k_hint_with_two_pass(self):
+        """top_k_hint should apply to both filtered and unfiltered passes."""
+        calls = []
+
+        def mock_search(query, top_k=5, where=None):
+            calls.append({"top_k": top_k, "where": where})
+            if where is not None:
+                return [_make_chunk(f"f{i}") for i in range(3)]
+            else:
+                return [_make_chunk(f"u{i}") for i in range(3)]
+
+        state = {
+            "query": "test",
+            "metadata_hints": {"date_start": "2024-01-01", "date_end": "2024-12-31"},
+            "top_k_hint": 20,
+        }
+        result = search_corpus(state, mock_search)
+
+        assert calls[0]["top_k"] == 20
+        assert calls[1]["top_k"] == 20
 
     def test_uses_reformulated_query(self):
         """Should use reformulated_query when available."""

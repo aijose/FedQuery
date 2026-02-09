@@ -146,3 +146,59 @@ class TestAssessQueryDateExtraction:
             "date_start": "2024-12-01",
             "date_end": "2024-12-31",
         }
+
+    @patch("src.agent.nodes.get_llm")
+    def test_top_k_hint_full_year(self, mock_get_llm):
+        """Full year query → top_k_hint should be set (e.g. 20)."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='{"needs_retrieval": true, "date_start": "2024-01-01", "date_end": "2024-12-31", "top_k_hint": 20}'
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "List the fed funds rate for each month in 2024"}
+        result = assess_query(state)
+
+        assert result["top_k_hint"] == 20
+
+    @patch("src.agent.nodes.get_llm")
+    def test_top_k_hint_null_defaults_to_none(self, mock_get_llm):
+        """Narrow query → top_k_hint null → None."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='{"needs_retrieval": true, "date_start": "2024-12-01", "date_end": "2024-12-31", "top_k_hint": null}'
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "Who dissented in December 2024?"}
+        result = assess_query(state)
+
+        assert result["top_k_hint"] is None
+
+    @patch("src.agent.nodes.get_llm")
+    def test_top_k_hint_clamped_to_50(self, mock_get_llm):
+        """top_k_hint above 50 is ignored."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='{"needs_retrieval": true, "date_start": null, "date_end": null, "top_k_hint": 100}'
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "test"}
+        result = assess_query(state)
+
+        assert result["top_k_hint"] is None
+
+    @patch("src.agent.nodes.get_llm")
+    def test_top_k_hint_missing_from_json(self, mock_get_llm):
+        """Old-format JSON without top_k_hint → None."""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='{"needs_retrieval": true, "date_start": null, "date_end": null}'
+        )
+        mock_get_llm.return_value = mock_llm
+
+        state = {"query": "test"}
+        result = assess_query(state)
+
+        assert result["top_k_hint"] is None

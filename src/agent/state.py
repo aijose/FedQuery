@@ -25,3 +25,4 @@ class AgentState(TypedDict):
     citations: list[dict]
     needs_retrieval: bool
     metadata_hints: dict | None
+    top_k_hint: int | None
