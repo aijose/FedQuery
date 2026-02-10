@@ -231,6 +231,21 @@ python -m pytest tests/ -v
 
 192 tests covering unit, integration, contract, and MCP round-trip tests. One FAISS IVF test is skipped on macOS ARM due to a known segfault when running alongside ChromaDB in the same process.
 
+### Full Agent Evaluation
+
+A complete end-to-end evaluation of the LangGraph agent against the golden QA dataset ([`data/eval/golden_qa.json`](data/eval/golden_qa.json)) is documented in [`full_evaluation.md`](full_evaluation.md). The evaluation ran 24 questions across 5 categories through the full agent pipeline (`assess_query` → `search_corpus` → `evaluate_confidence` → `synthesize_answer` → `validate_citations` → `respond`).
+
+| Category | Questions | High Confidence | Keyword Recall |
+|---|---|---|---|
+| Factual | 9 | 9/9 | 22/28 |
+| Cross-document | 5 | 5/5 | 20/22 |
+| Section-specific | 4 | 4/4 | 24/25 |
+| Temporal | 3 | 3/3 | 10/11 |
+| Out-of-scope | 3 | 0/3 (correct) | N/A |
+| **Total** | **24** | **21/24** | **76/86 (88%)** |
+
+All 3 out-of-scope questions were correctly rejected with `insufficient` confidence. The 6 missing keyword hits are mostly format variants (e.g., the agent used `5-1/4` instead of `5.25`) — the semantic content was correct in every case.
+
 ## Design Principles
 
 1. **Local-First**: Everything runs locally except LLM API calls
