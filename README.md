@@ -163,19 +163,20 @@ Compares two approximate nearest neighbor (ANN) index types using FAISS on the f
 
 **IVF** (Inverted File Index) partitions the vector space into Voronoi cells using k-means clustering. At query time, it only searches the `nprobe` nearest cells rather than the full dataset. Tuning knobs: `nlist` (number of cells — partition granularity), `nprobe` (cells searched — recall/speed tradeoff). When `nprobe = nlist`, IVF degrades to brute-force. When `nprobe = 1`, recall drops to ~40-54% because relevant vectors in adjacent cells are missed entirely.
 
-### Benchmark Results (1,545 chunks)
+### Recall-Matched Comparison (1,545 chunks)
 
-| Metric | HNSW (M=32 ef=64) | IVF (nlist=25 nprobe=10) | Brute-Force |
-|--------|-------------------|--------------------------|-------------|
-| Recall@5 | 0.933 | 0.959 | 1.000 |
-| Avg Latency | 0.030ms | 0.017ms | 0.031ms |
-| P99 Latency | 0.057ms | 0.022ms | 0.036ms |
-| Index Size | 2,727 KB | 2,367 KB | 2,318 KB |
-| Real Query Recall@5 | 1.000 | 1.000 | 1.000 |
+To compare fairly, we ran full parameter sweeps (HNSW: M in {16, 32, 48} x efSearch in {16, 32, 64, 128}; IVF: nlist in {10, 25, 39} x nprobe in {1, 3, 5, 10}) using 200 random query vectors against a brute-force ground truth. For each recall target, the table shows the cheapest config from each index:
 
-Both hit 100% recall on real FOMC queries — the recall gap only appears on random vectors where geometric edge cases matter. Full parameter sweeps (HNSW: M={16,32,64} x efSearch={32,64,128}; IVF: nlist={10,25,39} x nprobe={1,5,10,all}) are in [`optimization_efforts.md`](optimization_efforts.md).
+| Target | Best HNSW (recall, latency) | Best IVF (recall, latency) | Verdict |
+|--------|----------------------------|---------------------------|---------|
+| >=60% | M=32 ef=16 (63.8%, 0.011ms) | nl=25 np=3 (66.7%, 0.007ms) | IVF faster |
+| >=80% | M=48 ef=32 (83.1%, 0.020ms) | nl=10 np=3 (80.9%, 0.011ms) | IVF faster |
+| >=90% | M=32 ef=64 (91.2%, 0.032ms) | nl=25 np=10 (92.4%, 0.015ms) | IVF 2x faster |
+| >=98% | M=32 ef=128 (98.4%, 0.056ms) | nl=10 np=10 (99.9%, 0.033ms) | IVF faster |
 
-**Why HNSW is the right default**: ChromaDB uses HNSW internally — no separate index to build or sync. HNSW scales without retuning as the corpus grows (IVF needs centroid retraining). And at this corpus size, all methods are sub-millisecond — thousands of times faster than the LLM API call. IVF's memory advantage only matters at millions of vectors.
+Brute-force baseline: 0.034ms with perfect recall. At 1,545 vectors, neither ANN index beats brute-force for high recall — IVF's best config (nlist=10, nprobe=10) searches all cells, effectively brute-force at 0.033ms, while HNSW's best (M=32, ef=128) costs 0.056ms due to graph traversal overhead. The full sweep tables and detailed analysis are in [`benchmark_analsys.md`](benchmark_analsys.md).
+
+**Why HNSW is the right default**: ChromaDB uses HNSW internally — no separate index to build or sync. HNSW scales without retuning as the corpus grows (IVF needs periodic k-means retraining when `nlist` needs adjustment). And at this corpus size, all methods are sub-millisecond — the vector search contributes <0.01% of end-to-end latency compared to the 2-5 second LLM API call. ANN indexes only provide meaningful speedups at >10K-100K vectors where linear scan becomes expensive.
 
 ## Configuration
 
@@ -199,6 +200,7 @@ fedquery ingest --years 2023 2024    # Download and index FOMC documents
 fedquery ask "your question here"     # Ask a question with citations
 fedquery evaluate                     # Run retrieval quality evaluation
 fedquery benchmark                    # Run HNSW vs IVF comparison
+fedquery benchmark --sweep            # Full parameter sweep with recall-matched comparison
 ```
 
 ## Project Structure

@@ -45,7 +45,7 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Natural language search query"},
-                    "top_k": {"type": "integer", "default": 5, "description": "Number of results (max 20)"},
+                    "top_k": {"type": "integer", "default": 10, "description": "Number of results (max 50)"},
                     "where": {"type": "object", "description": "Optional ChromaDB where filter for metadata (e.g. date range)"},
                 },
                 "required": ["query"],
@@ -77,7 +77,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def _handle_search_fomc(arguments: dict) -> list[TextContent]:
     query = arguments.get("query", "")
-    top_k = min(arguments.get("top_k", 5), 20)
+    top_k = min(arguments.get("top_k", 10), 50)
     where = arguments.get("where")
 
     if not query or len(query) > 1000:
